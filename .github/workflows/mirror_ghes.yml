@@ -1,0 +1,49 @@
+name: Mirror to GHES
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create repo if not exists
+        run: |
+          REPO_NAME=${GITHUB_REPOSITORY#*/}
+          ORG_NAME=${GITHUB_REPOSITORY_OWNER}
+
+          STATUS=$(curl -k -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${{ secrets.GHES_TOKEN }}" \
+            https://github.unicentrobr.com.br/api/v3/repos/$ORG_NAME/$REPO_NAME)
+
+          if [ "$STATUS" = "404" ]; then
+            echo "Repositorio nao existe. Criando..."
+
+            curl -k -X POST \
+              -H "Authorization: token ${{ secrets.GHES_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              https://github.unicentrobr.com.br/api/v3/orgs/$ORG_NAME/repos \
+              -d "{
+                \"name\":\"$REPO_NAME\",
+                \"private\":true
+              }"
+          else
+            echo "Repositorio ja existe."
+          fi
+
+      - name: Push to GHES
+        run: |
+          REPO_NAME=${GITHUB_REPOSITORY#*/}
+          ORG_NAME=${GITHUB_REPOSITORY_OWNER}
+
+          git remote add ghes https://ricardoneves:${{ secrets.GHES_TOKEN }}@github.unicentrobr.com.br/$ORG_NAME/$REPO_NAME.git
+
+          git push --mirror ghes
